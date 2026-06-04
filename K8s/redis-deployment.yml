@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: employee-management
+  labels:
+    app: redis
+spec:
+  replicas: 1                # Run 1 copy (same as Compose default)
+  selector:
+    matchLabels:
+      app: redis             # This Deployment manages Pods labeled "app: redis"
+  template:                  # Blueprint for the Pod
+    metadata:
+      labels:
+        app: redis           # Label on the Pod (must match selector above)
+    spec:
+      containers:
+      - name: redis          # Name of the container
+        image: redis:7-alpine # Exact same image as your Compose!
+        ports:
+        - containerPort: 6379 # Port the container listens on
+        volumeMounts:
+        - name: redis-data    # Mount the volume
+          mountPath: /data    # Same path as Compose
+      volumes:
+      - name: redis-data
+        emptyDir: {}          # Simple volume for now (we'll upgrade later)

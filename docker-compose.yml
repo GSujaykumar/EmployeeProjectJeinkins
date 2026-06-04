@@ -1,0 +1,109 @@
+name: employee-management
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: employee-management-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: employeedb
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - employee-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: employee-management-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - employee-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  employee-app:
+    build: .
+    image: employee-management:1.0
+    container_name: employee-management-app
+    ports:
+      - "8080:8089"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/employeedb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_CACHE_TYPE: redis
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      zipkin:
+        condition: service_started
+    networks:
+      - employee-network
+
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    container_name: employee-management-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - employee-network
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: employee-management-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - employee-app
+    networks:
+      - employee-network
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: employee-management-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - employee-network
+
+volumes:
+  mysql-data:
+    name: employee-management-mysql-data
+  redis-data:
+    name: employee-management-redis-data
+  grafana-data:
+    name: employee-management-grafana-data
+
+networks:
+  employee-network:
+    name: employee-management-network
